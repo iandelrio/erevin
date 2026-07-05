@@ -1,0 +1,48 @@
+{
+  "source": "summit_air_ai_phone_agent",
+  "submitted_at": "2026-07-05T19:35:00.000Z",
+  "caller": {
+    "name": "Taylor Morgan",
+    "phone": "unknown",
+    "phone_source": "unavailable",
+    "caller_id_private": true,
+    "callback_phone_available": false
+  },
+  "service_location": {
+    "address_line_1": "88 Flatbush Ave",
+    "address_line_2": null,
+    "borough": "Brooklyn",
+    "is_in_service_area": true
+  },
+  "property": {
+    "type": "commercial",
+    "business_name": "Flatbush Studio"
+  },
+  "issue": {
+    "category": "no_ac",
+    "description": "commercial studio AC is down",
+    "system": "ac"
+  },
+  "urgency": {
+    "level": "priority",
+    "priority_reasons": [
+      "Commercial operational impact"
+    ],
+    "safety_action_given": null,
+    "caller_confirmed_safe": false
+  },
+  "availability": {
+    "preferred_windows": [
+      "Tomorrow morning"
+    ],
+    "timezone": "America/New_York"
+  },
+  "next_step": {
+    "status": "booked",
+    "spoken_confirmation": "Request captured, but no callback phone was available."
+  },
+  "conversation": {
+    "transcript_url": null,
+    "agent_version": "summit-air-v1"
+  }
+}

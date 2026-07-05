@@ -82,6 +82,8 @@ Pass criteria:
 
 Goal: turn the conversation into a structured service request sent to a fixed Summit Air ops/demo email recipient.
 
+Implementation artifact: see `docs/summit-air-milestone-three.md` and `api/summit-air/service-request.js`.
+
 Tasks:
 
 - Build a small HTTPS endpoint, for example `/api/summit-air/service-request`.

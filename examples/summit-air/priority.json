@@ -1,0 +1,49 @@
+{
+  "source": "summit_air_ai_phone_agent",
+  "submitted_at": "2026-07-05T19:05:00.000Z",
+  "caller": {
+    "name": "Morgan Lee",
+    "phone": "+16465550111",
+    "phone_source": "twilio_caller_id",
+    "caller_id_private": false,
+    "callback_phone_available": true
+  },
+  "service_location": {
+    "address_line_1": "42-10 31st Ave",
+    "address_line_2": null,
+    "borough": "Queens",
+    "is_in_service_area": true
+  },
+  "property": {
+    "type": "residential",
+    "business_name": null
+  },
+  "issue": {
+    "category": "no_heat",
+    "description": "no heat in the apartment with an elderly parent at home",
+    "system": "boiler"
+  },
+  "urgency": {
+    "level": "priority",
+    "priority_reasons": [
+      "No heat",
+      "Elderly resident in home"
+    ],
+    "safety_action_given": null,
+    "caller_confirmed_safe": false
+  },
+  "availability": {
+    "preferred_windows": [
+      "Tonight between 7 and 9 PM"
+    ],
+    "timezone": "America/New_York"
+  },
+  "next_step": {
+    "status": "booked",
+    "spoken_confirmation": "Booked tonight between 7 and 9 PM and marked priority."
+  },
+  "conversation": {
+    "transcript_url": null,
+    "agent_version": "summit-air-v1"
+  }
+}

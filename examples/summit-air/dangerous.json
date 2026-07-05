@@ -1,0 +1,48 @@
+{
+  "source": "summit_air_ai_phone_agent",
+  "submitted_at": "2026-07-05T19:20:00.000Z",
+  "caller": {
+    "name": "Avery Chen",
+    "phone": "+12125550145",
+    "phone_source": "twilio_caller_id",
+    "caller_id_private": false,
+    "callback_phone_available": true
+  },
+  "service_location": {
+    "address_line_1": "200 W 72nd St",
+    "address_line_2": "Unit 9C",
+    "borough": "Manhattan",
+    "is_in_service_area": true
+  },
+  "property": {
+    "type": "residential",
+    "business_name": null
+  },
+  "issue": {
+    "category": "gas_smell",
+    "description": "caller smelled rotten eggs near the furnace",
+    "system": "furnace"
+  },
+  "urgency": {
+    "level": "dangerous_safety_handoff",
+    "priority_reasons": [
+      "Possible gas leak"
+    ],
+    "safety_action_given": "Caller was told to leave the building, get to fresh air, and call 911 from a safe location.",
+    "caller_confirmed_safe": true
+  },
+  "availability": {
+    "preferred_windows": [
+      "After emergency services clear the location"
+    ],
+    "timezone": "America/New_York"
+  },
+  "next_step": {
+    "status": "booked",
+    "spoken_confirmation": "Safety instructions were given first; Summit Air request captured for follow-up after the location is safe."
+  },
+  "conversation": {
+    "transcript_url": null,
+    "agent_version": "summit-air-v1"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "source": "summit_air_ai_phone_agent",
+  "submitted_at": "2026-07-05T18:30:00.000Z",
+  "caller": {
+    "name": "Jane Smith",
+    "phone": "+17185550123",
+    "phone_source": "twilio_caller_id",
+    "caller_id_private": false,
+    "callback_phone_available": true
+  },
+  "service_location": {
+    "address_line_1": "123 Atlantic Ave",
+    "address_line_2": "Apt 4B",
+    "borough": "Brooklyn",
+    "is_in_service_area": true
+  },
+  "property": {
+    "type": "residential",
+    "business_name": null
+  },
+  "issue": {
+    "category": "maintenance",
+    "description": "annual AC maintenance",
+    "system": "ac"
+  },
+  "urgency": {
+    "level": "routine",
+    "priority_reasons": [],
+    "safety_action_given": null,
+    "caller_confirmed_safe": false
+  },
+  "availability": {
+    "preferred_windows": [
+      "July 7, 2026 between 10 AM and noon"
+    ],
+    "timezone": "America/New_York"
+  },
+  "next_step": {
+    "status": "booked",
+    "spoken_confirmation": "Booked for July 7, 2026 between 10 AM and noon."
+  },
+  "conversation": {
+    "transcript_url": null,
+    "agent_version": "summit-air-v1"
+  }
+}
