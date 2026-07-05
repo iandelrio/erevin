@@ -7,10 +7,11 @@ Status: lightweight 72-hour build plan
 - We have access to an ElevenLabs account with Conversational AI credits.
 - We can buy a US phone number through Twilio.
 - We can import the purchased Twilio number into ElevenLabs using the native Twilio integration.
-- We can use Twilio SMS for the first customer confirmation path.
-- Most callers will call from a cell phone. If caller ID is private or unavailable, the agent will ask for an email address.
-- Email provider setup is only required for the private/unknown caller ID fallback path.
-- Summit Air accepts service requests and confirmations by SMS/email for this MVP.
+- We can send an internal ops/demo email from the webhook to a fixed recipient.
+- We will not use customer SMS or WhatsApp for the take-home MVP because production messaging compliance and sender setup can block delivery.
+- Most callers will expose caller ID. If caller ID is private or unavailable, the agent will ask once for the best callback phone number.
+- The agent will not ask callers for email addresses.
+- Customer confirmation is spoken during the call. The written summary is sent only to the fixed ops/demo email recipient.
 - Covered service area is Manhattan, Queens, and Brooklyn.
 
 ## Telephony Decision
@@ -73,29 +74,32 @@ Pass criteria:
 - Agent answers naturally.
 - Agent asks one question at a time.
 - Agent collects name, address, residential/commercial, issue, and availability.
-- Agent uses caller ID as the contact/SMS number when available.
+- Agent stores caller ID as the callback number when available.
 - Agent confirms the selected service window as booked.
 - Agent does not quote prices or troubleshoot.
 
 ## Milestone 3: Service Request Webhook and Notification
 
-Goal: turn the conversation into a structured service request sent to Summit Air.
+Goal: turn the conversation into a structured service request sent to a fixed Summit Air ops/demo email recipient.
 
 Tasks:
 
 - Build a small HTTPS endpoint, for example `/api/summit-air/service-request`.
 - Validate incoming payloads against the schema in the architecture doc.
 - Add a shared secret or provider signature check.
-- Send a concise Twilio SMS confirmation to the caller's captured phone number when caller ID is available.
-- Send an email confirmation instead when caller ID is private, anonymous, unknown, or unavailable.
-- Include the raw JSON only in internal logs or an ops-only debug copy, not in the customer SMS.
+- Send a dispatcher-ready email summary to a fixed ops/demo recipient, configured through an environment variable.
+- Include the caller phone from Twilio/ElevenLabs caller ID when available.
+- Include a caller-provided callback phone only when caller ID is private, anonymous, unknown, or unavailable.
+- Include the raw structured JSON in the ops email or internal logs for review.
+- Do not send customer SMS, WhatsApp, or customer email in the MVP.
 - Return a clear success/failure response to the agent platform.
 
 Suggested payload validation:
 
-- Required: caller name, either caller phone or email, address, borough, property type, issue description, urgency level, availability or desired next step.
-- If `confirmation_channel` is `sms`, require a valid E.164 phone number.
-- If caller ID is private or unavailable, require a valid email address and set `confirmation_channel` to `email`.
+- Required: caller name, address, borough, property type, issue description, urgency level, availability or desired next step.
+- If caller ID is available, store it as the caller phone and set `phone_source` to `twilio_caller_id`.
+- If caller ID is private or unavailable, ask once for a callback phone number and set `phone_source` to `caller_provided` if captured.
+- If no callback phone is available, mark the caller phone as `unknown` and make that limitation visible in the ops email.
 - Reject or flag out-of-area boroughs.
 - Require `safety_action_given` and `caller_confirmed_safe` for dangerous classifications.
 
@@ -104,13 +108,14 @@ Tests:
 - Submit a fake routine payload directly to the webhook.
 - Submit a fake priority payload directly to the webhook.
 - Submit a fake dangerous payload directly to the webhook.
-- Submit a fake private-caller payload with email fallback.
+- Submit a fake private-caller payload with a caller-provided callback phone.
+- Submit a fake private-caller payload with no callback phone and verify the ops limitation is visible.
 - Complete a real phone call and verify the summary arrives.
 
 Pass criteria:
 
-- Valid payload sends a readable SMS when caller phone is present.
-- Private/unknown caller payload sends a readable email confirmation.
+- Valid payload sends a readable ops email.
+- The ops email contains the human summary, urgency, callback phone if available, and raw structured JSON.
 - Invalid payload is rejected or clearly marked incomplete.
 - Priority and dangerous fields appear prominently in the notification.
 
@@ -135,7 +140,7 @@ Test cases:
 | Outside area | Caller is in the Bronx or Nassau County. | Agent declines booking because Summit Air only serves Manhattan, Queens, and Brooklyn. |
 | Troubleshooting request | Caller asks how to relight a pilot or reset equipment. | Agent says it cannot troubleshoot and offers to book service. |
 | Price request | Caller asks how much it will cost. | Agent does not quote; says Summit Air can discuss pricing separately. |
-| Private caller ID | Caller blocks caller ID. | Agent asks for email address and uses email confirmation instead of SMS. |
+| Private caller ID | Caller blocks caller ID. | Agent asks once for the best callback phone number and records `unknown` if none is provided. |
 
 Prompt iteration loop:
 
@@ -155,8 +160,8 @@ Tasks:
 - Test both interrupting the agent and changing answers mid-call.
 - Test a caller who gives address before name.
 - Test a caller who asks if the agent is human.
-- Test a normal caller-ID call and verify SMS confirmation.
-- Test private/unknown caller ID and verify email fallback.
+- Test a normal caller-ID call and verify the ops email includes caller ID.
+- Test private/unknown caller ID and verify caller-provided callback handling.
 - Test noisy background audio if practical.
 - Verify every completed call creates exactly one summary.
 - Verify dangerous calls do not create a normal-looking routine request.
@@ -173,8 +178,8 @@ Before giving out the number:
 
 - Phone number is active and inbound routing is stable.
 - ElevenLabs agent is using the current prompt version.
-- SMS confirmation works for captured caller ID.
-- Email fallback works for private/unknown caller ID, or the fallback limitation is documented.
+- Ops/demo email delivery works.
+- Caller ID capture works, or the private/unknown caller limitation is documented.
 - Webhook secrets are configured.
 - Test calls cover routine, priority, dangerous, silence, tangent, out-of-area, price, troubleshooting, caller-ID, and private-caller cases.
 - Known limitations are documented.
@@ -194,9 +199,9 @@ Day 1:
 
 Day 2:
 
-- Build webhook and email/SMS summary.
+- Build webhook and ops email summary.
 - Add structured output validation.
-- Add SMS-by-default confirmation using Twilio caller ID and email fallback for private callers.
+- Add caller ID capture and private-caller callback handling.
 - Run routine, priority, dangerous, and out-of-area calls.
 - Tune prompt based on transcripts.
 
@@ -205,7 +210,7 @@ Day 3:
 - Run edge-case test matrix.
 - Tighten prompt and notification format.
 - Re-run failed cases.
-- Prepare the callable number, prompt version, and test notes for live stress testing.
+- Prepare the callable number, ops email sample, prompt version, and test notes for live stress testing.
 
 ## What to Skip for the MVP
 

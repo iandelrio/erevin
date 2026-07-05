@@ -4,7 +4,7 @@ Status: 72-hour MVP design
 
 ## Goal
 
-Build an English-only inbound phone agent for Summit Air that can hold a real scheduling conversation, triage HVAC urgency, collect service-request details, and send a structured summary by email or SMS. The MVP should be callable from a real phone number and easy to tune live after test calls.
+Build an English-only inbound phone agent for Summit Air that can hold a real scheduling conversation, triage HVAC urgency, collect service-request details, and send a structured summary to a fixed ops/demo email recipient. The MVP should be callable from a real phone number and easy to tune live after test calls.
 
 ## Scope
 
@@ -14,9 +14,9 @@ In scope:
 - Identify the HVAC issue without troubleshooting.
 - Determine residential vs. commercial.
 - Confirm service area: Manhattan, Queens, or Brooklyn only.
-- Collect caller name, phone number, service address, issue, urgency indicators, and availability.
+- Collect caller name, callback phone if needed, service address, issue, urgency indicators, and availability.
 - Distinguish routine, priority, dangerous, and out-of-area calls.
-- Confirm the requested service window or next step and send a structured service request summary.
+- Confirm the requested service window or next step verbally and send a structured service request summary to ops email.
 
 Out of scope:
 
@@ -25,6 +25,7 @@ Out of scope:
 - CRM, dispatch, calendar, or database integration.
 - Requests outside Manhattan, Queens, or Brooklyn.
 - Non-English handling beyond politely saying Summit Air's AI assistant currently supports English.
+- Customer SMS, WhatsApp, or customer email notifications.
 
 ## Recommended Stack
 
@@ -36,10 +37,11 @@ Primary path:
   - First message and silence behavior.
   - Tool or webhook support for submitting the final service request.
   - Post-call transcript and summary capture if available on the account.
-- Twilio Programmable Voice for the callable phone number, call routing, call logs, fallback routing, and SMS notifications.
+- Twilio Programmable Voice for the callable phone number, call routing, call logs, and fallback routing.
 - ElevenLabs native Twilio integration to connect the purchased Twilio number directly to the Summit Air agent.
-- A tiny HTTPS service for receiving service-request JSON and sending summaries.
-- Twilio SMS for the customer confirmation summary when caller ID is present. Email is only needed as a fallback when caller ID is private, anonymous, unknown, or otherwise unavailable.
+- A tiny HTTPS service for receiving service-request JSON and sending ops summaries.
+- Fixed ops/demo email as the MVP written notification path. Customer confirmation is spoken during the call.
+- SMS and WhatsApp are post-MVP notification adapters because production messaging registration, sender verification, and template requirements can block a take-home demo.
 
 Why this is the recommended demo path:
 
@@ -47,6 +49,7 @@ Why this is the recommended demo path:
 - ElevenLabs should still own the realtime AI conversation. Do not build a custom audio bridge unless the native integration blocks delivery.
 - A purchased Twilio number is required for inbound calls. A verified caller ID is useful for outbound caller ID, but it cannot receive inbound calls or be assigned to the agent.
 - Twilio provides inbound caller ID as the `From` value when available. ElevenLabs' Twilio personalization webhook exposes this as `caller_id`, so the agent can usually avoid asking for the caller's phone number.
+- Fixed ops email avoids asking callers for email addresses and avoids dependency on SMS/WhatsApp compliance during the take-home timeline.
 - If an ElevenLabs-managed number is immediately available in the account, it may be faster for the first smoke test, but Twilio remains the better demo foundation because it gives more operational control.
 
 Fallback path if native ElevenLabs telephony setup blocks delivery:
@@ -79,7 +82,8 @@ Useful vendor docs:
 5. Agent collects only the missing required fields, one question at a time.
 6. Agent summarizes the captured request and confirms the requested service window.
 7. Agent submits structured JSON to the webhook.
-8. Webhook validates the JSON and sends a concise SMS confirmation to the caller's captured phone number. If caller ID was private or unavailable, it sends email confirmation to the address collected during the call.
+8. Webhook validates the JSON and sends a dispatcher-ready email to the fixed ops/demo recipient.
+9. Webhook logs the caller phone from caller ID or caller-provided callback number when available.
 
 ## Scheduling Policy
 
@@ -158,15 +162,16 @@ If the address is outside the service area:
 
 ## Caller Contact Policy
 
-Default assumption: inbound callers are calling from a cell phone, and Twilio caller ID is SMS-capable.
+Default assumption: inbound caller ID is usually available and is enough for a callback number in the take-home MVP.
 
 Contact capture rules:
 
-- If Twilio/ElevenLabs provides a valid `caller_id`, store it as the caller phone number and do not ask the caller to repeat it unless the agent needs to confirm the best callback/SMS number.
-- If caller ID is `anonymous`, `unknown`, `private`, unavailable, or clearly not a phone number, ask for an email address for the confirmation summary.
-- Do not require both phone and email for the MVP. Require either a valid caller phone number or a caller-provided email address.
-- Customer-facing SMS should be concise and should not include raw JSON.
-- Internal logs or the ops copy may include the raw structured JSON for debugging.
+- If Twilio/ElevenLabs provides a valid `caller_id`, store it as the caller phone number and do not ask the caller to repeat it.
+- If caller ID is `anonymous`, `unknown`, `private`, unavailable, or clearly not a phone number, ask once for the best callback phone number.
+- Do not ask callers for email addresses.
+- If no callback phone number is available, mark the phone as `unknown` and make that limitation prominent in the ops email.
+- Customer-facing written confirmation is out of scope for the MVP. The agent provides spoken confirmation before ending the call.
+- Internal logs and the ops email may include the raw structured JSON for debugging and evaluation.
 
 ## Structured Service Request Schema
 
@@ -179,8 +184,7 @@ Contact capture rules:
     "phone": "E.164 string | anonymous | unknown | null",
     "phone_source": "twilio_caller_id | caller_provided | unavailable",
     "caller_id_private": false,
-    "email": "string | null",
-    "confirmation_channel": "sms | email"
+    "callback_phone_available": true
   },
   "service_location": {
     "address_line_1": "string",
@@ -211,11 +215,6 @@ Contact capture rules:
     "status": "booked | not_booked",
     "spoken_confirmation": "string"
   },
-  "notifications": {
-    "customer_summary_channel": "sms | email",
-    "customer_summary_destination": "string",
-    "ops_summary_channel": "sms | email | log_only"
-  },
   "conversation": {
     "transcript_url": "string | null",
     "agent_version": "summit-air-v1"
@@ -236,6 +235,7 @@ Summit Air serves Manhattan, Queens, and Brooklyn only. Summit Air offers 24/7 s
 
 Required fields before creating a service request:
 - Caller name.
+- Caller phone from caller ID, or a caller-provided callback phone if caller ID is unavailable. If the caller will not provide one, mark it unknown and proceed.
 - Service address and borough.
 - Residential or commercial.
 - HVAC issue in the caller's own words.
@@ -250,6 +250,7 @@ Urgency rules:
 
 Conversation behavior:
 - If the caller goes on a long unrelated tangent, briefly acknowledge it and redirect to the current missing detail: "I hear you. To get the service request set up, I just need..."
+- Do not ask the caller for an email address. If caller ID is unavailable, ask for the best callback phone number instead.
 - If the caller is silent at the start, wait briefly, then say: "Hello, this is Summit Air's scheduling assistant. Can you hear me?" If silence continues, try once more, then politely end the call.
 - If the caller goes silent mid-call, repeat the last question once. If silence continues, summarize what you have and ask whether they want to continue. If there is still no response, say Summit Air did not get enough information to book and end politely.
 - If asked to promise arrival, repair, or price, do not promise. Say you can mark priority when appropriate, capture their availability, and have the request sent to Summit Air.
@@ -259,6 +260,7 @@ Conversation behavior:
 Before ending:
 - Summarize the request in one or two sentences.
 - Confirm whether it is booked for the requested window, priority, dangerous safety follow-up, or not booked because it is out of area.
+- Say Summit Air will follow up at the number from the call, or at the callback number the caller provided. If no callback number is available, say you captured the request details but do not promise follow-up.
 ```
 
 ## Edge Case Handling
@@ -275,34 +277,34 @@ Before ending:
 | Caller wants price | No quote. Offer to create service request and note that Summit Air can discuss pricing separately. | Prompt rule. |
 | Caller wants troubleshooting | No troubleshooting. Capture symptoms and book. | Prompt rule. |
 | Outside coverage area | Do not book; explain service area. | Prompt rule plus borough validation. |
-| Private or unknown caller ID | Ask for email address for the confirmation summary. Do not require both phone and email. | Twilio caller ID metadata plus prompt rule. |
+| Private or unknown caller ID | Ask once for the best callback phone number. If unavailable, mark phone as unknown and show that clearly in the ops email. | Twilio caller ID metadata plus prompt rule. |
 | Mixed intent | Handle safety first, then booking. Example: gas smell plus annual maintenance becomes dangerous first. | Prompt priority order. |
 
 ## Notification Summary
 
-Customer SMS should include:
+Customer spoken confirmation should include:
 
 - Summit Air confirmation.
 - Requested service window.
 - Urgency level if priority or dangerous safety follow-up.
 - Address or borough.
 - Short issue description.
+- The callback number that Summit Air should use when available.
 - No raw JSON.
 
-Customer email fallback should include the same fields when caller ID is private or unavailable.
-
-Internal ops summary, if enabled, should include:
+Internal ops email should include:
 
 - Subject line: `[Summit Air] PRIORITY no heat - Queens - Jane Smith`
 - Human summary.
 - Urgency level and reasons.
-- Caller name, phone if available, and email if collected.
+- Caller name and phone if available.
 - Address and borough.
 - Residential/commercial.
 - Requested window.
 - Safety instructions given, if any.
 - Raw structured JSON.
 - Transcript link or transcript text if available.
+- Delivery note if caller ID was private and no callback phone was captured.
 
 ## Operational Notes
 
@@ -310,4 +312,5 @@ Internal ops summary, if enabled, should include:
 - Keep a call-test matrix with the transcript, expected classification, actual classification, and prompt changes made.
 - Log webhook delivery failures and send retry/error alerts during testing.
 - Do not store more personal data than needed for the service request.
-- Use environment variables for all vendor keys and notification recipients.
+- Use environment variables for all vendor keys and the fixed ops email recipient.
+- Keep SMS and WhatsApp as documented post-MVP adapters, not blockers for the take-home demo.
