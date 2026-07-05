@@ -313,4 +313,3 @@ Internal ops email should include:
 - Log webhook delivery failures and send retry/error alerts during testing.
 - Do not store more personal data than needed for the service request.
 - Use environment variables for all vendor keys and the fixed ops email recipient.
-- Keep SMS and WhatsApp as documented post-MVP adapters, not blockers for the take-home demo.
