@@ -71,6 +71,21 @@ function normalizeElevenLabsPostCallPayload(payload, options = {}) {
     conversation_id: data.conversation_id
   }
 
+  // The analysis LLM sometimes fills caller_phone with a literal instruction
+  // like "Twilio caller ID" instead of a real number, since it cannot see the
+  // actual caller ID. Discard values that are neither a usable phone nor a
+  // recognized private marker so the Twilio system__caller_id fallback wins.
+  if (
+    flatFields.caller_phone &&
+    !isUsablePhone(flatFields.caller_phone) &&
+    !isPrivateCallerId(flatFields.caller_phone)
+  ) {
+    delete flatFields.caller_phone
+    delete flatFields.phone_source
+    delete flatFields.caller_id_private
+    delete flatFields.callback_phone_available
+  }
+
   if (!flatFields.caller_phone && twilioCallerId && isUsablePhone(twilioCallerId)) {
     flatFields.caller_phone = twilioCallerId
     flatFields.phone_source = 'twilio_caller_id'
