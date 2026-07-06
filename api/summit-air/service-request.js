@@ -2,17 +2,16 @@ const { verifyWebhookAuth } = require('../../src/summit-air/auth')
 const { sendOpsEmail } = require('../../src/summit-air/resend')
 const { processServiceRequestPayload } = require('../../src/summit-air/service-request')
 
-module.exports = async function serviceRequestHandler(req, res) {
-  if (req.method !== 'POST') {
-    return sendJson(res, 405, { ok: false, error: 'Method not allowed' }, { Allow: 'POST' })
-  }
+// Web-standard handler (Request -> Response), selected by exporting a named
+// `POST`. The legacy (req, res) signature is a non-starter here: @vercel/node
+// auto-parses the JSON body, and re-serializing it produces different bytes
+// than ElevenLabs signed, which breaks HMAC verification. `request.text()`
+// gives us the exact raw bytes that were signed.
+async function POST(request) {
+  const rawBody = await request.text()
+  const headers = headersToObject(request.headers)
 
-  const rawBody = await readRawBody(req)
-  const auth = verifyWebhookAuth({
-    headers: req.headers,
-    rawBody,
-    env: process.env
-  })
+  const auth = verifyWebhookAuth({ headers, rawBody, env: process.env })
 
   if (!auth.ok) {
     console.warn('Summit Air webhook auth failed:', {
@@ -20,26 +19,26 @@ module.exports = async function serviceRequestHandler(req, res) {
       error: auth.error,
       hasElevenLabsSecret: Boolean(process.env.ELEVENLABS_WEBHOOK_SECRET),
       hasSharedSecret: Boolean(process.env.SUMMIT_AIR_WEBHOOK_SECRET),
-      hasSignatureHeader: Boolean(req.headers['elevenlabs-signature']),
+      hasSignatureHeader: Boolean(headers['elevenlabs-signature']),
       rawBodyLength: rawBody ? rawBody.length : 0,
-      contentLength: req.headers['content-length'] || null,
-      contentType: req.headers['content-type'] || null
+      contentLength: headers['content-length'] || null,
+      contentType: headers['content-type'] || null
     })
 
-    return sendJson(res, auth.statusCode || 401, { ok: false, error: auth.error })
+    return json(auth.statusCode || 401, { ok: false, error: auth.error })
   }
 
   let payload
   try {
     payload = JSON.parse(rawBody)
   } catch {
-    return sendJson(res, 400, { ok: false, error: 'Request body must be valid JSON' })
+    return json(400, { ok: false, error: 'Request body must be valid JSON' })
   }
 
   const result = processServiceRequestPayload(payload)
 
   if (!result.validation.isValid) {
-    return sendJson(res, 422, {
+    return json(422, {
       ok: false,
       error: 'Invalid service request payload',
       errors: result.validation.errors,
@@ -52,7 +51,7 @@ module.exports = async function serviceRequestHandler(req, res) {
       idempotencyKey: result.idempotencyKey
     })
 
-    return sendJson(res, 200, {
+    return json(200, {
       ok: true,
       received: true,
       auth_method: auth.method,
@@ -62,53 +61,36 @@ module.exports = async function serviceRequestHandler(req, res) {
   } catch (error) {
     console.error('Summit Air email delivery failed:', error)
 
-    return sendJson(res, 502, {
+    return json(502, {
       ok: false,
       error: 'Service request was valid, but ops email delivery failed'
     })
   }
 }
 
-async function readRawBody(req) {
-  if (typeof req.body === 'string') {
-    return req.body
+function headersToObject(headers) {
+  const result = {}
+
+  for (const [key, value] of headers) {
+    result[key] = value
   }
 
-  if (Buffer.isBuffer(req.body)) {
-    return req.body.toString('utf8')
-  }
-
-  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length) {
-    return JSON.stringify(req.body)
-  }
-
-  const chunks = []
-
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  }
-
-  return Buffer.concat(chunks).toString('utf8')
+  return result
 }
 
-function sendJson(res, statusCode, body, headers = {}) {
-  res.statusCode = statusCode
-
-  for (const [key, value] of Object.entries({
-    'Content-Type': 'application/json',
-    ...headers
-  })) {
-    res.setHeader(key, value)
-  }
-
-  res.end(JSON.stringify(body))
+function json(status, body, extraHeaders = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...extraHeaders
+    }
+  })
 }
 
-module.exports.config = {
-  maxDuration: 10,
-  // Disable Vercel's automatic body parsing so we can read the exact raw bytes
-  // ElevenLabs signed. Re-serializing a parsed object breaks HMAC verification.
-  api: {
-    bodyParser: false
+module.exports = {
+  POST,
+  config: {
+    maxDuration: 10
   }
 }

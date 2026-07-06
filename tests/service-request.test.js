@@ -10,7 +10,7 @@ const {
   processServiceRequestPayload,
   validateServiceRequest
 } = require('../src/summit-air/service-request')
-const serviceRequestHandler = require('../api/summit-air/service-request')
+const { POST: serviceRequestHandler } = require('../api/summit-air/service-request')
 
 function routinePayload(overrides = {}) {
   return {
@@ -303,35 +303,22 @@ test('API route authenticates, validates, and sends ops email', async (t) => {
     globalThis.fetch = fetchBackup
   })
 
-  const req = {
+  const request = new Request('https://example.com/api/summit-air/service-request', {
     method: 'POST',
     headers: {
-      authorization: 'Bearer test-secret'
+      authorization: 'Bearer test-secret',
+      'content-type': 'application/json'
     },
     body: JSON.stringify(routinePayload())
-  }
-  const res = createMockResponse()
+  })
 
-  await serviceRequestHandler(req, res)
+  const response = await serviceRequestHandler(request)
+  const body = await response.json()
 
-  assert.equal(res.statusCode, 200)
-  assert.equal(res.body.ok, true)
-  assert.equal(res.body.email_id, 'email_route_123')
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(body.email_id, 'email_route_123')
 })
-
-function createMockResponse() {
-  return {
-    statusCode: 0,
-    headers: {},
-    body: null,
-    setHeader(key, value) {
-      this.headers[key.toLowerCase()] = value
-    },
-    end(value) {
-      this.body = JSON.parse(value)
-    }
-  }
-}
 
 function restoreEnv(key, value) {
   if (value === undefined) {
