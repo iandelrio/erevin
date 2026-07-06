@@ -190,7 +190,7 @@ function buildServiceRequestFromFlatFields(fields, rawPayload, options = {}) {
       timezone: pickFirst(fields.timezone, 'America/New_York')
     },
     next_step: {
-      status: normalizeEnum(pickFirst(fields.next_step_status, fields.status), NEXT_STEP_STATUSES, 'booked'),
+      status: normalizeEnum(pickFirst(fields.next_step_status, fields.status), NEXT_STEP_STATUSES, 'not_booked'),
       spoken_confirmation: cleanString(pickFirst(fields.spoken_confirmation, fields.confirmation))
     },
     conversation: {
@@ -249,7 +249,7 @@ function applyDefaults(serviceRequest, rawPayload, options = {}) {
   serviceRequest.availability.timezone ||= 'America/New_York'
 
   serviceRequest.next_step ||= {}
-  serviceRequest.next_step.status = normalizeEnum(serviceRequest.next_step.status, NEXT_STEP_STATUSES, 'booked')
+  serviceRequest.next_step.status = normalizeEnum(serviceRequest.next_step.status, NEXT_STEP_STATUSES, 'not_booked')
   serviceRequest.next_step.spoken_confirmation = cleanString(serviceRequest.next_step.spoken_confirmation)
 
   serviceRequest.conversation ||= {}

@@ -122,6 +122,14 @@ test('ops email uses the ElevenLabs summary, hides safety rows off dangerous cal
   assert.match(email.text, /Call recording: https:\/\/elevenlabs\.io\/app\/conversational-ai\/history\/conv_abc123/)
 })
 
+test('an abandoned call defaults to not_booked and drops booked-only flags', () => {
+  const result = processServiceRequestPayload({ type: 'post_call_transcription', data: {} })
+
+  assert.equal(result.serviceRequest.next_step.status, 'not_booked')
+  assert.ok(!result.validation.errors.some((error) => error.includes('preferred_windows')))
+  assert.ok(!result.validation.warnings.some((warning) => warning.includes('no spoken confirmation')))
+})
+
 test('booked without a spoken confirmation is a warning, not a blocking error', () => {
   const validation = validateServiceRequest(routinePayload({
     next_step: { status: 'booked', spoken_confirmation: '' }
