@@ -441,14 +441,16 @@ function extractTranscriptText(payload) {
 }
 
 function findCallerId(...sources) {
+  // Keys are matched after stripping non-alphanumerics and lowercasing, so
+  // entries here must be in that normalized form (e.g. ElevenLabs'
+  // `system__caller_id` dynamic variable normalizes to `systemcallerid`).
   const keys = new Set([
-    'caller_id',
     'callerid',
+    'systemcallerid',
     'from',
-    'from_number',
     'caller',
-    'caller_number',
-    'phone_number',
+    'callernumber',
+    'phonenumber',
     'phone'
   ])
 
