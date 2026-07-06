@@ -197,7 +197,7 @@ Contact capture rules:
     "business_name": "string | null"
   },
   "issue": {
-    "category": "no_heat | no_ac | maintenance | gas_smell | carbon_monoxide | water_leak | noise | other",
+    "category": ["no_heat | no_ac | maintenance | gas_smell | carbon_monoxide | water_leak | noise | other"],
     "description": "string",
     "system": "ac | furnace | heat_pump | boiler | thermostat | unknown"
   },

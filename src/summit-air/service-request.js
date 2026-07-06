@@ -171,7 +171,7 @@ function buildServiceRequestFromFlatFields(fields, rawPayload, options = {}) {
       business_name: nullableString(pickFirst(fields.business_name, fields.company_name))
     },
     issue: {
-      category: normalizeEnum(pickFirst(fields.issue_category, fields.category), ISSUE_CATEGORIES, 'other'),
+      category: normalizeEnumArray(pickFirst(fields.issue_category, fields.category), ISSUE_CATEGORIES, 'other'),
       description: cleanString(pickFirst(fields.issue_description, fields.description, fields.issue)),
       system: normalizeEnum(pickFirst(fields.system, fields.hvac_system), HVAC_SYSTEMS, 'unknown')
     },
@@ -229,7 +229,7 @@ function applyDefaults(serviceRequest, rawPayload, options = {}) {
   serviceRequest.property.business_name = nullableString(serviceRequest.property.business_name)
 
   serviceRequest.issue ||= {}
-  serviceRequest.issue.category = normalizeEnum(serviceRequest.issue.category, ISSUE_CATEGORIES, 'other')
+  serviceRequest.issue.category = normalizeEnumArray(serviceRequest.issue.category, ISSUE_CATEGORIES, 'other')
   serviceRequest.issue.description = cleanString(serviceRequest.issue.description)
   serviceRequest.issue.system = normalizeEnum(serviceRequest.issue.system, HVAC_SYSTEMS, 'unknown')
 
@@ -267,7 +267,7 @@ function validateServiceRequest(serviceRequest) {
 
   requireEnum(errors, serviceRequest.caller?.phone_source, PHONE_SOURCES, 'caller.phone_source')
   requireEnum(errors, serviceRequest.property?.type, PROPERTY_TYPES, 'property.type')
-  requireEnum(errors, serviceRequest.issue?.category, ISSUE_CATEGORIES, 'issue.category')
+  requireEnumArray(errors, serviceRequest.issue?.category, ISSUE_CATEGORIES, 'issue.category')
   requireEnum(errors, serviceRequest.issue?.system, HVAC_SYSTEMS, 'issue.system')
   requireEnum(errors, serviceRequest.urgency?.level, URGENCY_LEVELS, 'urgency.level')
   requireEnum(errors, serviceRequest.next_step?.status, NEXT_STEP_STATUSES, 'next_step.status')
@@ -323,7 +323,9 @@ function validateServiceRequest(serviceRequest) {
 function buildOpsEmail(serviceRequest, options = {}) {
   const warnings = options.warnings || []
   const urgencyLabel = serviceRequest.urgency.level.toUpperCase()
-  const categoryLabel = serviceRequest.issue.category.replaceAll('_', ' ')
+  const categoryLabel = serviceRequest.issue.category
+    .map((category) => category.replaceAll('_', ' '))
+    .join(', ')
   const borough = serviceRequest.service_location.borough || 'Unknown borough'
   const callerName = serviceRequest.caller.name || 'Unknown caller'
   const callbackUnavailable = !isUsablePhone(serviceRequest.caller.phone)
@@ -582,9 +584,22 @@ function asBoolean(value, fallback) {
   return fallback
 }
 
-function normalizeEnum(value, allowedValues, fallback) {
+function normalizeEnumOrNull(value, allowedValues) {
   const text = cleanString(value).toLowerCase().replace(/[\s-]+/g, '_')
-  return allowedValues.has(text) ? text : fallback
+  return allowedValues.has(text) ? text : null
+}
+
+function normalizeEnum(value, allowedValues, fallback) {
+  return normalizeEnumOrNull(value, allowedValues) ?? fallback
+}
+
+function normalizeEnumArray(value, allowedValues, fallback) {
+  const items = asArray(value)
+    .map((item) => normalizeEnumOrNull(item, allowedValues))
+    .filter(Boolean)
+  const unique = [...new Set(items)]
+  if (unique.length) return unique
+  return fallback ? [fallback] : []
 }
 
 function cleanString(value) {
@@ -627,6 +642,21 @@ function requireString(errors, value, path) {
 function requireEnum(errors, value, allowedValues, path) {
   if (!allowedValues.has(value)) {
     errors.push(`${path} must be one of: ${Array.from(allowedValues).join(', ')}`)
+  }
+}
+
+function requireEnumArray(errors, values, allowedValues, path) {
+  const list = Array.isArray(values) ? values : []
+
+  if (!list.length) {
+    errors.push(`${path} must include at least one of: ${Array.from(allowedValues).join(', ')}`)
+    return
+  }
+
+  for (const value of list) {
+    if (!allowedValues.has(value)) {
+      errors.push(`${path} has an invalid value: ${value}`)
+    }
   }
 }
 

@@ -34,7 +34,7 @@ function routinePayload(overrides = {}) {
       business_name: null
     },
     issue: {
-      category: 'maintenance',
+      category: ['maintenance'],
       description: 'annual AC maintenance',
       system: 'ac'
     },
@@ -64,14 +64,29 @@ test('valid routine payload builds a dispatcher email', () => {
   const result = processServiceRequestPayload(routinePayload())
 
   assert.equal(result.validation.isValid, true)
+  assert.deepEqual(result.serviceRequest.issue.category, ['maintenance'])
   assert.match(result.email.subject, /\[Summit Air\] ROUTINE maintenance - Brooklyn - Jane Smith/)
   assert.match(result.email.text, /Raw Structured JSON/)
+})
+
+test('issue category accepts multiple values from a comma-separated string', () => {
+  const result = processServiceRequestPayload(routinePayload({
+    issue: {
+      category: 'noise, water_leak',
+      description: 'weird sound and water leaking from the unit',
+      system: 'unknown'
+    }
+  }))
+
+  assert.equal(result.validation.isValid, true)
+  assert.deepEqual(result.serviceRequest.issue.category, ['noise', 'water_leak'])
+  assert.match(result.email.subject, /ROUTINE noise, water leak - Brooklyn/)
 })
 
 test('dangerous payload requires safety action and caller safe confirmation', () => {
   const payload = routinePayload({
     issue: {
-      category: 'gas_smell',
+      category: ['gas_smell'],
       description: 'caller smells rotten eggs near furnace',
       system: 'furnace'
     },

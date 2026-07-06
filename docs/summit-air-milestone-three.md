@@ -118,6 +118,17 @@ Data collection descriptions should be explicit. Example:
 urgency_level: Classify as exactly one of routine, priority, dangerous_safety_handoff, or out_of_area. Use dangerous_safety_handoff only for gas smell, carbon monoxide, smoke, fire, sparking, or immediate safety risk. Use out_of_area when the location is outside Manhattan, Queens, and Brooklyn.
 ```
 
+`issue_category` supports multiple values. Configure it as a **String** data
+point (not a single-select enum) so the agent can return more than one issue,
+and instruct it to return a comma-separated list drawn from the allowed values:
+
+```text
+issue_category: One or more of no_heat, no_ac, maintenance, gas_smell, carbon_monoxide, water_leak, noise, other. Return every category that applies as a comma-separated list, e.g. "noise, water_leak". Do not invent categories outside this list.
+```
+
+The endpoint normalizes the string into an array and drops any value outside the
+allowed set.
+
 For Twilio caller ID, either:
 
 - pass `caller_id` into the conversation as a dynamic variable through ElevenLabs Twilio personalization, or
