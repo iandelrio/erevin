@@ -83,6 +83,24 @@ test('issue category accepts multiple values from a comma-separated string', () 
   assert.match(result.email.subject, /ROUTINE noise, water leak - Brooklyn/)
 })
 
+test('incomplete payload still builds a review-flagged email instead of blocking', () => {
+  const result = processServiceRequestPayload(routinePayload({
+    caller: {
+      name: '',
+      phone: '+17185550123',
+      phone_source: 'twilio_caller_id',
+      caller_id_private: false,
+      callback_phone_available: true
+    }
+  }))
+
+  assert.equal(result.validation.isValid, false)
+  assert.ok(result.email, 'email is still built for an incomplete request')
+  assert.match(result.email.subject, /NEEDS REVIEW/)
+  assert.match(result.email.html, /caller\.name is required/)
+  assert.match(result.email.text, /NEEDS REVIEW/)
+})
+
 test('dangerous payload requires safety action and caller safe confirmation', () => {
   const payload = routinePayload({
     issue: {
@@ -317,7 +335,59 @@ test('API route authenticates, validates, and sends ops email', async (t) => {
 
   assert.equal(response.status, 200)
   assert.equal(body.ok, true)
+  assert.equal(body.complete, true)
   assert.equal(body.email_id, 'email_route_123')
+})
+
+test('API route sends an email and returns 200 even for an incomplete request', async (t) => {
+  const envBackup = {
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    SUMMIT_AIR_WEBHOOK_SECRET: process.env.SUMMIT_AIR_WEBHOOK_SECRET,
+    SUMMIT_AIR_OPS_EMAIL: process.env.SUMMIT_AIR_OPS_EMAIL
+  }
+  const fetchBackup = globalThis.fetch
+
+  process.env.RESEND_API_KEY = 're_test'
+  process.env.SUMMIT_AIR_WEBHOOK_SECRET = 'test-secret'
+  process.env.SUMMIT_AIR_OPS_EMAIL = 'ops@example.com'
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ id: 'email_incomplete_123' })
+  })
+
+  t.after(() => {
+    restoreEnv('RESEND_API_KEY', envBackup.RESEND_API_KEY)
+    restoreEnv('SUMMIT_AIR_WEBHOOK_SECRET', envBackup.SUMMIT_AIR_WEBHOOK_SECRET)
+    restoreEnv('SUMMIT_AIR_OPS_EMAIL', envBackup.SUMMIT_AIR_OPS_EMAIL)
+    globalThis.fetch = fetchBackup
+  })
+
+  const request = new Request('https://example.com/api/summit-air/service-request', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer test-secret',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify(routinePayload({
+      caller: {
+        name: '',
+        phone: '+17185550123',
+        phone_source: 'twilio_caller_id',
+        caller_id_private: false,
+        callback_phone_available: true
+      }
+    }))
+  })
+
+  const response = await serviceRequestHandler(request)
+  const body = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(body.complete, false)
+  assert.equal(body.email_id, 'email_incomplete_123')
+  assert(body.errors.some((error) => error.includes('caller.name')))
 })
 
 function restoreEnv(key, value) {

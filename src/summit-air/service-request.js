@@ -22,13 +22,14 @@ function processServiceRequestPayload(payload, options = {}) {
   return {
     ...normalized,
     validation,
-    email: validation.isValid
-      ? buildOpsEmail(normalized.serviceRequest, {
-        warnings: validation.warnings,
-        transcriptText: normalized.transcriptText,
-        receivedPayloadType: normalized.receivedPayloadType
-      })
-      : null
+    // Always build an email. Validation issues annotate the email as review
+    // flags rather than blocking delivery, so ops gets a lead after every call.
+    email: buildOpsEmail(normalized.serviceRequest, {
+      errors: validation.errors,
+      warnings: validation.warnings,
+      transcriptText: normalized.transcriptText,
+      receivedPayloadType: normalized.receivedPayloadType
+    })
   }
 }
 
@@ -322,6 +323,9 @@ function validateServiceRequest(serviceRequest) {
 
 function buildOpsEmail(serviceRequest, options = {}) {
   const warnings = options.warnings || []
+  const errors = options.errors || []
+  const needsReview = errors.length > 0
+  const reviewItems = [...errors, ...warnings]
   const urgencyLabel = serviceRequest.urgency.level.toUpperCase()
   const categoryLabel = serviceRequest.issue.category
     .map((category) => category.replaceAll('_', ' '))
@@ -332,13 +336,14 @@ function buildOpsEmail(serviceRequest, options = {}) {
 
   const subject = [
     '[Summit Air]',
+    needsReview ? 'NEEDS REVIEW -' : null,
     urgencyLabel,
     categoryLabel,
     '-',
     borough,
     '-',
     callerName
-  ].join(' ')
+  ].filter(Boolean).join(' ')
 
   const summary = buildHumanSummary(serviceRequest)
   const structuredJson = JSON.stringify(serviceRequest, null, 2)
@@ -363,10 +368,13 @@ function buildOpsEmail(serviceRequest, options = {}) {
     ['Payload source', options.receivedPayloadType || 'service_request']
   ]
 
-  const warningBlock = warnings.length || callbackUnavailable
-    ? `<div style="border: 2px solid #b45309; background: #fffbeb; color: #78350f; padding: 12px; margin: 0 0 16px 0;">
-        <strong>${callbackUnavailable ? 'CALLBACK PHONE UNAVAILABLE' : 'Review needed'}</strong>
-        <ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>
+  const reviewTitle = needsReview
+    ? 'INCOMPLETE — NEEDS REVIEW'
+    : (callbackUnavailable ? 'CALLBACK PHONE UNAVAILABLE' : 'Review needed')
+  const reviewBlock = reviewItems.length
+    ? `<div style="border: 2px solid ${needsReview ? '#b91c1c' : '#b45309'}; background: ${needsReview ? '#fef2f2' : '#fffbeb'}; color: ${needsReview ? '#7f1d1d' : '#78350f'}; padding: 12px; margin: 0 0 16px 0;">
+        <strong>${reviewTitle}</strong>
+        <ul>${reviewItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
       </div>`
     : ''
 
@@ -374,7 +382,7 @@ function buildOpsEmail(serviceRequest, options = {}) {
     <div style="font-family: Arial, sans-serif; max-width: 760px; margin: 0 auto; color: #111827;">
       <h1 style="font-size: 22px; margin: 0 0 8px 0;">Summit Air Service Request</h1>
       <p style="margin: 0 0 18px 0; color: #4b5563;">${escapeHtml(summary)}</p>
-      ${warningBlock}
+      ${reviewBlock}
       <table style="width: 100%; border-collapse: collapse; margin: 0 0 20px 0;">
         <tbody>
           ${rows.map(([label, value]) => `
@@ -399,7 +407,7 @@ function buildOpsEmail(serviceRequest, options = {}) {
     '',
     summary,
     '',
-    warnings.length ? `Warnings:\n${warnings.map((warning) => `- ${warning}`).join('\n')}` : null,
+    reviewItems.length ? `${needsReview ? 'NEEDS REVIEW' : 'Warnings'}:\n${reviewItems.map((item) => `- ${item}`).join('\n')}` : null,
     '',
     ...rows.map(([label, value]) => `${label}: ${value}`),
     '',

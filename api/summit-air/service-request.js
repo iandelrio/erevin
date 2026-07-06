@@ -37,15 +37,8 @@ async function POST(request) {
 
   const result = processServiceRequestPayload(payload)
 
-  if (!result.validation.isValid) {
-    return json(422, {
-      ok: false,
-      error: 'Invalid service request payload',
-      errors: result.validation.errors,
-      warnings: result.validation.warnings
-    })
-  }
-
+  // Always send the ops email. Validation issues are surfaced as review flags
+  // in the email and the response, but never block delivery of the lead.
   try {
     const delivery = await sendOpsEmail(result.email, {
       idempotencyKey: result.idempotencyKey
@@ -54,8 +47,10 @@ async function POST(request) {
     return json(200, {
       ok: true,
       received: true,
+      complete: result.validation.isValid,
       auth_method: auth.method,
       email_id: delivery?.id || null,
+      errors: result.validation.errors,
       warnings: result.validation.warnings
     })
   } catch (error) {
@@ -63,7 +58,7 @@ async function POST(request) {
 
     return json(502, {
       ok: false,
-      error: 'Service request was valid, but ops email delivery failed'
+      error: 'Service request received, but ops email delivery failed'
     })
   }
 }
