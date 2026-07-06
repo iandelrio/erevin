@@ -15,6 +15,17 @@ module.exports = async function serviceRequestHandler(req, res) {
   })
 
   if (!auth.ok) {
+    console.warn('Summit Air webhook auth failed:', {
+      status: auth.statusCode || 401,
+      error: auth.error,
+      hasElevenLabsSecret: Boolean(process.env.ELEVENLABS_WEBHOOK_SECRET),
+      hasSharedSecret: Boolean(process.env.SUMMIT_AIR_WEBHOOK_SECRET),
+      hasSignatureHeader: Boolean(req.headers['elevenlabs-signature']),
+      rawBodyLength: rawBody ? rawBody.length : 0,
+      contentLength: req.headers['content-length'] || null,
+      contentType: req.headers['content-type'] || null
+    })
+
     return sendJson(res, auth.statusCode || 401, { ok: false, error: auth.error })
   }
 
@@ -94,5 +105,10 @@ function sendJson(res, statusCode, body, headers = {}) {
 }
 
 module.exports.config = {
-  maxDuration: 10
+  maxDuration: 10,
+  // Disable Vercel's automatic body parsing so we can read the exact raw bytes
+  // ElevenLabs signed. Re-serializing a parsed object breaks HMAC verification.
+  api: {
+    bodyParser: false
+  }
 }
