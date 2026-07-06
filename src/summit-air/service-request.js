@@ -27,6 +27,7 @@ function processServiceRequestPayload(payload, options = {}) {
     email: buildOpsEmail(normalized.serviceRequest, {
       errors: validation.errors,
       warnings: validation.warnings,
+      transcriptSummary: normalized.transcriptSummary,
       transcriptText: normalized.transcriptText,
       receivedPayloadType: normalized.receivedPayloadType
     })
@@ -51,6 +52,7 @@ function normalizeServiceRequestPayload(payload, options = {}) {
     receivedPayloadType,
     serviceRequest,
     transcriptText: extractTranscriptText(payload),
+    transcriptSummary: extractTranscriptSummary(payload),
     idempotencyKey: makeIdempotencyKey(serviceRequest, payload)
   }
 }
@@ -105,6 +107,7 @@ function normalizeElevenLabsPostCallPayload(payload, options = {}) {
     receivedPayloadType: 'elevenlabs_post_call_transcription',
     serviceRequest,
     transcriptText: extractTranscriptText(payload),
+    transcriptSummary: extractTranscriptSummary(payload),
     idempotencyKey: makeIdempotencyKey(serviceRequest, payload)
   }
 }
@@ -192,6 +195,7 @@ function buildServiceRequestFromFlatFields(fields, rawPayload, options = {}) {
     },
     conversation: {
       transcript_url: nullableString(fields.transcript_url),
+      conversation_id: nullableString(fields.conversation_id),
       agent_version: pickFirst(fields.agent_version, 'summit-air-v1')
     }
   }, rawPayload, options)
@@ -250,6 +254,7 @@ function applyDefaults(serviceRequest, rawPayload, options = {}) {
 
   serviceRequest.conversation ||= {}
   serviceRequest.conversation.transcript_url = nullableString(serviceRequest.conversation.transcript_url)
+  serviceRequest.conversation.conversation_id = nullableString(serviceRequest.conversation.conversation_id)
   serviceRequest.conversation.agent_version ||= 'summit-air-v1'
 
   return serviceRequest
@@ -306,6 +311,10 @@ function validateServiceRequest(serviceRequest) {
     errors.push('booked requests must include at least one availability.preferred_windows value')
   }
 
+  if (nextStepStatus === 'booked' && !cleanString(serviceRequest.next_step?.spoken_confirmation)) {
+    warnings.push('Booked but no spoken confirmation was captured on the call')
+  }
+
   if (!isUsablePhone(serviceRequest.caller?.phone)) {
     warnings.push('Callback phone is unavailable or unknown')
   }
@@ -345,9 +354,17 @@ function buildOpsEmail(serviceRequest, options = {}) {
     callerName
   ].filter(Boolean).join(' ')
 
-  const summary = buildHumanSummary(serviceRequest)
+  // Prefer ElevenLabs' clean third-person summary when present; the locally
+  // built one stitches raw first-person quotes together and reads poorly.
+  const summary = cleanString(options.transcriptSummary) || buildHumanSummary(serviceRequest)
   const structuredJson = JSON.stringify(serviceRequest, null, 2)
   const transcriptText = options.transcriptText || null
+
+  const isDangerousCall = serviceRequest.urgency.level === 'dangerous_safety_handoff'
+  const conversationLink = serviceRequest.conversation.transcript_url
+    || (serviceRequest.conversation.conversation_id
+      ? `https://elevenlabs.io/app/conversational-ai/history/${serviceRequest.conversation.conversation_id}`
+      : null)
 
   const rows = [
     ['Urgency', urgencyLabel],
@@ -361,9 +378,9 @@ function buildOpsEmail(serviceRequest, options = {}) {
     ['System', serviceRequest.issue.system],
     ['Requested window', serviceRequest.availability.preferred_windows.join(', ') || 'Not provided'],
     ['Next step', `${serviceRequest.next_step.status}: ${serviceRequest.next_step.spoken_confirmation || 'No spoken confirmation captured'}`],
-    ['Safety action', serviceRequest.urgency.safety_action_given || 'Not applicable'],
-    ['Caller confirmed safe', String(serviceRequest.urgency.caller_confirmed_safe)],
-    ['Transcript URL', serviceRequest.conversation.transcript_url || 'Not provided'],
+    ['Safety action', isDangerousCall ? (serviceRequest.urgency.safety_action_given || 'None recorded') : 'N/A'],
+    ['Caller confirmed safe', isDangerousCall ? String(serviceRequest.urgency.caller_confirmed_safe) : 'N/A'],
+    ['Call recording', conversationLink || 'Not provided'],
     ['Agent version', serviceRequest.conversation.agent_version],
     ['Payload source', options.receivedPayloadType || 'service_request']
   ]
@@ -463,6 +480,10 @@ function extractTranscriptText(payload) {
   }
 
   return nullableString(payload?.conversation?.transcript_text || payload?.transcript_text)
+}
+
+function extractTranscriptSummary(payload) {
+  return nullableString(payload?.data?.analysis?.transcript_summary || payload?.transcript_summary)
 }
 
 function findCallerId(...sources) {

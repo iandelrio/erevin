@@ -101,6 +101,36 @@ test('incomplete payload still builds a review-flagged email instead of blocking
   assert.match(result.email.text, /NEEDS REVIEW/)
 })
 
+test('ops email uses the ElevenLabs summary, hides safety rows off dangerous calls, and links the call', () => {
+  const email = buildOpsEmail(routinePayload({
+    urgency: {
+      level: 'routine',
+      priority_reasons: [],
+      safety_action_given: null,
+      caller_confirmed_safe: false
+    },
+    conversation: {
+      transcript_url: null,
+      conversation_id: 'conv_abc123',
+      agent_version: 'summit-air-v1'
+    }
+  }), { transcriptSummary: 'Dave Ryans reported a leaking HVAC unit and booked a visit.' })
+
+  assert.match(email.text, /Dave Ryans reported a leaking HVAC unit/)
+  assert.match(email.text, /Safety action: N\/A/)
+  assert.match(email.text, /Caller confirmed safe: N\/A/)
+  assert.match(email.text, /Call recording: https:\/\/elevenlabs\.io\/app\/conversational-ai\/history\/conv_abc123/)
+})
+
+test('booked without a spoken confirmation is a warning, not a blocking error', () => {
+  const validation = validateServiceRequest(routinePayload({
+    next_step: { status: 'booked', spoken_confirmation: '' }
+  }))
+
+  assert.equal(validation.isValid, true)
+  assert(validation.warnings.some((warning) => warning.includes('no spoken confirmation')))
+})
+
 test('dangerous payload requires safety action and caller safe confirmation', () => {
   const payload = routinePayload({
     issue: {

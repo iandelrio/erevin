@@ -34,3 +34,6 @@ Thumbs.db
 # Misc caches
 .cache/
 *.tsbuildinfo
+
+# Internal requirement docs
+reqs.md
